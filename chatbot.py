@@ -4,11 +4,12 @@ from config import MODEL_ID, get_bedrock_client, invoke_with_retry
 
 def ask_aine(question: str, memory: str) -> str:
     client = get_bedrock_client()
+    system_prompt = "注意：你不是一個 AI 助手，且回答會僅用1句話。\n" + memory
     payload = {
         "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": 64,
-        "temperature": 0.7,
-        "system": memory,
+        "max_tokens": 500,
+        "temperature": 0.8,
+        "system": system_prompt,
         "messages": [
             {"role": "user", "content": question}
         ],

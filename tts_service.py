@@ -1,25 +1,43 @@
 # tts_service.py
+
+import os
+import io
+import wave
 import boto3
-import ffmpeg
+import simpleaudio as sa
 
-polly = boto3.client("polly")
+# 初始化 Polly（確保 AWS_DEFAULT_REGION 已設定）
+polly = boto3.client(
+    "polly",
+    region_name=os.getenv("AWS_DEFAULT_REGION", "us-west-2")
+)
 
-def synthesize_speech(text: str, mp3_path: str = "reply.mp3") -> str:
+def speak(text: str):
+    """
+    使用 Neural 引擎中文女聲即時合成並播放，
+    調整 SampleRate 為 16000，避免 InvalidSampleRateException。
+    """
+    # 1) 合成 PCM（去掉或改為支援的取樣率 16000）
     resp = polly.synthesize_speech(
-        Text=text, OutputFormat="mp3", VoiceId="Joanna"
+        Text=text,
+        VoiceId="Zhiyu",       # 中文女聲
+        Engine="neural",       # Neural 引擎
+        OutputFormat="pcm",
+        SampleRate="16000",    # Polly 支援的有效取樣率
+        LanguageCode="cmn-CN"
     )
-    with open(mp3_path, "wb") as f:
-        f.write(resp["AudioStream"].read())
-    return mp3_path
+    pcm = resp["AudioStream"].read()
 
-import subprocess
+    # 2) 在記憶體中包 WAV header
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)        # 單聲道
+        wf.setsampwidth(2)        # 16-bit
+        wf.setframerate(16000)    # 16 kHz
+        wf.writeframes(pcm)
+    buf.seek(0)
 
-def mp3_to_wav(mp3_path: str, wav_path: str = "reply.wav") -> str:
-    # -y: overwrite, -ar 16000: 取樣率 16kHz, -ac 1: 單聲道
-    subprocess.run([
-        "ffmpeg", "-y",
-        "-i", mp3_path,
-        "-ar", "16000", "-ac", "1",
-        wav_path
-    ], check=True)
-    return wav_path
+    # 3) 非同步播放
+    wave_read = wave.open(buf, "rb")
+    wave_obj  = sa.WaveObject.from_wave_read(wave_read)
+    wave_obj.play()
